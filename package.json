@@ -1,5 +1,5 @@
 {
-  "name": "jhubcode",
+	"name": "jhubcode",
 	"displayName": "JHubCode",
 	"description": "",
 	"version": "0.0.1",
@@ -10,15 +10,20 @@
 		"Other"
 	],
 	"activationEvents": [
-        "onCommand:jhubcode.helloWorld"
+		"onCommand:jhubcode.init"
 	],
-	"main": "./extension.js",
+	"main": "./src/extension.js",
 	"contributes": {
-		"commands": [{
-            "command": "jhubcode.helloWorld",
-            "title": "Hello World"
-
-		}]
+		"commands": [
+			{
+				"command": "jhubcode.init",
+				"title": "Init Jhub Code"
+			},
+			{
+				"command": "jhubcode.terminalStart",
+				"title": "Start Jupyterlab Terminal"
+			}
+		]
 	},
 	"scripts": {
 		"lint": "eslint .",
@@ -26,15 +31,20 @@
 		"test": "node ./test/runTest.js"
 	},
 	"devDependencies": {
-        "@types/vscode": "^1.61.0",
-        "@types/glob": "^7.1.4",
-        "@types/mocha": "^9.0.0",
-        "@types/node": "14.x",
-        "eslint": "^7.32.0",
-        "glob": "^7.1.7",
-        "mocha": "^9.1.1",
-        "typescript": "^4.4.3",
-        "@vscode/test-electron": "^1.6.2"
-    }
-
+		"@types/glob": "^7.1.4",
+		"@types/mocha": "^9.0.0",
+		"@types/node": "14.x",
+		"@types/vscode": "^1.61.0",
+		"@vscode/test-electron": "^1.6.2",
+		"eslint": "^7.32.0",
+		"glob": "^7.1.7",
+		"mocha": "^9.1.1",
+		"typescript": "^4.4.3"
+	},
+	"dependencies": {
+		"@jupyterlab/services": "^6.1.17",
+		"websocket": "^1.0.34",
+		"xterm": "^4.14.1",
+		"xterm-addon-fit": "^0.5.0"
+	}
 }

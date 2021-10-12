@@ -1,0 +1,6 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory `/Users/ethan/Documents/JupyterHub/jhubcode'
+make: Leaving directory `/Users/ethan/Documents/JupyterHub/jhubcode'
+ 
+make: *** No targets specified and no makefile found.  Stop.
+ 
