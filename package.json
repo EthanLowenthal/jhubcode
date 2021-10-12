@@ -17,7 +17,7 @@
 		"commands": [
 			{
 				"command": "jhubcode.init",
-				"title": "Init Jhub Code"
+				"title": "Init JupyterLab Code"
 			},
 			{
 				"command": "jhubcode.terminalStart",
