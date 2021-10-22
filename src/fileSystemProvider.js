@@ -5,6 +5,12 @@ var https = require('https');
 const output = vscode.window.createOutputChannel("JHub");
 
 const prefix = 'jhubfs'
+const LOAD_WHOLE_FILESYSTEM = false;
+const file_types = {
+    file: vscode.FileType.File,
+    directory: vscode.FileType.Directory,
+}
+const JHUB_URL = 'jhub.csc.uvic.ca'
 
 const sendRequest = ({options, data}) => {
     return new Promise((resolve, reject) => {
@@ -62,11 +68,13 @@ class Directory {
 }
 
 class JHubFS {
-    constructor() {
+    constructor(username, token) {
         this.root = new Directory('')
 
-        this.username;
-        this.token;
+        this.username = username;
+        this.token = token;
+        this.url = JHUB_URL;
+
 
         this._emitter = new vscode.EventEmitter();
         this._bufferedEvents = [];
@@ -79,7 +87,7 @@ class JHubFS {
         try {
             const res = await sendRequest({
                 options:  {
-                    hostname: "jhub.csc.uvic.ca",
+                    hostname: this.url,
                     port: 443,
                     path: `/user/${this.username}/api/status?token=${this.token}`,
                     method: 'GET',
@@ -89,12 +97,12 @@ class JHubFS {
             if (res.started) {
                 return true;
             } else {
-                vscode.window.showInformationMessage('Error: Server not started');
+                vscode.window.showErrorMessage('Error: Server not started');
                 return false;
             }
 
         } catch (e) {
-            vscode.window.showInformationMessage('Error: Server not started');
+            vscode.window.showErrorMessage('Error: Server not started');
             return false
         }
 
@@ -105,14 +113,18 @@ class JHubFS {
             throw vscode.FileSystemError.FileNotADirectory(uri);
         }
         if (!top) {
-            this.createDirectory(vscode.Uri.parse(uri));
+            this.createDirectoryEntry(vscode.Uri.parse(uri));
         }
         dir.content.forEach(item => {
+            const fileUri = `${prefix}:/${item.path}`;
             if (item.type == 'file') {
-                const fileUri = `${prefix}:/${item.path}`;
                 this.createFileEntry(vscode.Uri.parse(fileUri), item, { create: true, overwrite: true });
             } else if (item.type == 'directory') {
-                this.loadPath(item.path).then(data => this.parseDir(data));   
+                if (LOAD_WHOLE_FILESYSTEM) {
+                    this.loadPath(item.path).then(data => this.parseDir(data));   
+                } else {
+                    this.createDirectoryEntry(vscode.Uri.parse(fileUri));
+                }
             }
         });
         this._fireSoon({ type: vscode.FileChangeType.Changed, uri });
@@ -120,7 +132,7 @@ class JHubFS {
     loadPath(path) {
         return sendRequest({
             options:  {
-                hostname: "jhub.csc.uvic.ca",
+                hostname: this.url,
                 port: 443,
                 path: `/user/${this.username}/api/contents${path.startsWith('/')?'':'/'}${path}?token=${this.token}`,
                 method: 'GET',
@@ -146,41 +158,65 @@ class JHubFS {
 
     readDirectory(uri) {
         const entry = this._lookupAsDirectory(uri, false);
-        const result = [];
-        for (const [name, child] of entry.entries) {
-            result.push([name, child.type]);
+
+        if (entry && entry.entries.size) {
+            const result = [];
+            for (const [name, child] of entry.entries) {
+                result.push([name, child.type]);
+            }
+            return result;
+        } else {
+            return new Promise((resolve, reject) => {
+                this.loadPath(uri.path).then(dir => {
+                    dir.content.forEach(item => {
+                        const fileUri = `${prefix}:/${item.path}`;
+                        if (item.type == 'file') {
+                            this.createFileEntry(vscode.Uri.parse(fileUri), item, { create: true, overwrite: true });
+                        } else if (item.type == 'directory') {
+                            if (LOAD_WHOLE_FILESYSTEM) {
+                                this.loadPath(item.path).then(data => this.parseDir(data));   
+                            } else {
+                                this.createDirectoryEntry(vscode.Uri.parse(fileUri));
+                            }
+                        }
+                    });
+                    const result = dir.content.map(item => [item.name, file_types[item.type]]);
+                    resolve(result);
+                }).catch(err => {
+                    reject(err);
+                });
+            });
         }
-        return result;
+        // throw vscode.FileSystemError.FileNotFound();
+
     }
 
     // --- manage file contents
 
     readFile(uri) {
         const entry = this._lookupAsFile(uri, false);
-        if (entry) {
-            if (entry.data) {
-                return entry.data;
-            } else {
-                return new Promise((resolve, reject) => {
-                    this.loadPath(uri.path).then(file => {
-                        let content = Buffer.from('');
-                        switch (file.format) {
-                            default:
-                            case 'text':
-                                content = Buffer.from(file.content);
-                                break;
-                            case 'base64':
-                                content = Buffer.from(file.content, 'base64');
-                                break;
-                        }
-                        resolve(content);
-                    }).catch(err => {
-                        reject(err);
-                    });
+        if (entry && entry.data) {
+            return entry.data;
+        } else {
+            return new Promise((resolve, reject) => {
+                this.loadPath(uri.path).then(file => {
+                    let content = Buffer.from('');
+                    switch (file.format) {
+                        default:
+                        case 'text':
+                            content = Buffer.from(file.content);
+                            break;
+                        case 'base64':
+                            content = Buffer.from(file.content, 'base64');
+                            break;
+                    }
+                    resolve(content);
+                }).catch(err => {
+                    reject(err);
                 });
-            }
+            });
         }
-        throw vscode.FileSystemError.FileNotFound();
+        // throw vscode.FileSystemError.FileNotFound();
     }
 
     createFileEntry(uri, file, options) {
@@ -214,7 +250,7 @@ class JHubFS {
     writeFile(uri, content, options) {
         return sendRequest({
             options: {
-                hostname: "jhub.csc.uvic.ca",
+                hostname: this.url,
                 port: 443,
                 path: `/user/${this.username}/api/contents${uri.path}?token=${this.token}`,
                 method: 'PUT',
@@ -232,35 +268,20 @@ class JHubFS {
 
     rename(oldUri, newUri, options) {
         // TODO
-        if (!options.overwrite && this._lookup(newUri, true)) {
-            throw vscode.FileSystemError.FileExists(newUri);
-        }
+        // if (!options.overwrite && this._lookup(newUri, true)) {
+        //     throw vscode.FileSystemError.FileExists(newUri);
+        // }
 
-        sendRequest({
+        return sendRequest({
             options: {
-                hostname: "jhub.csc.uvic.ca",
+                hostname: this.url,
                 port: 443,
                 path: `/user/${this.username}/api/contents${oldUri.path}?token=${this.token}`,
                 method: 'PATCH',
             }, data: {
                 'path': newUri.path.substring(1)
             }
-        }).then(() => {
-            const entry = this._lookup(oldUri, false);
-            const oldParent = this._lookupParentDirectory(oldUri);
-    
-            const newParent = this._lookupParentDirectory(newUri);
-            const newName = path.posix.basename(newUri.path);
-    
-            oldParent.entries.delete(entry.name);
-            entry.name = newName;
-            newParent.entries.set(newName, entry);
-
-            this._fireSoon(
-                { type: vscode.FileChangeType.Deleted, uri: oldUri },
-                { type: vscode.FileChangeType.Created, uri: newUri }
-            );
-        });
+        })
     }
 
     delete(uri) {
@@ -270,19 +291,21 @@ class JHubFS {
         if (!parent.entries.has(basename)) {
             throw vscode.FileSystemError.FileNotFound(uri);
         }
-        sendRequest({
+        return sendRequest({
             options: {
-                hostname: "jhub.csc.uvic.ca",
+                hostname: this.url,
                 port: 443,
                 path: `/user/${this.username}/api/contents${uri.path}?token=${this.token}`,
                 method: 'DELETE',
             }, 
-        }).then(() => {
-            this._fireSoon({ type: vscode.FileChangeType.Changed, uri: dirname }, { uri, type: vscode.FileChangeType.Deleted });
-        });
+        })
+        // .then(() => {
+        //     this.loadFiles();
+        //     this._fireSoon({ type: vscode.FileChangeType.Changed, uri: dirname }, { uri, type: vscode.FileChangeType.Deleted });
+        // });
     }
 
-    createDirectory(uri) {
+    createDirectoryEntry(uri) {
         const basename = path.posix.basename(uri.path);
         const dirname = uri.with({ path: path.posix.dirname(uri.path) });
         const parent = this._lookupAsDirectory(dirname, false);
@@ -293,7 +316,21 @@ class JHubFS {
         parent.size += 1;
 
         this._fireSoon({ type: vscode.FileChangeType.Changed, uri: dirname }, { uri, type: vscode.FileChangeType.Deleted });
-        
+    }
+
+    createDirectory(uri) {
+        return sendRequest({
+            options: {
+                hostname: this.url,
+                port: 443,
+                path: `/user/${this.username}/api/contents${uri.path}?token=${this.token}`,
+                method: 'PUT',
+            }, 
+            data: {
+                path:  uri.path.substring(1),
+                type: 'directory'
+            }
+        });
     }
 
     // --- lookup
@@ -338,7 +375,6 @@ class JHubFS {
     }
 
     _lookupParentDirectory(uri) {
-        console.log(uri)
         const dirname = uri.with({ path: path.posix.dirname(uri.path) });
         return this._lookupAsDirectory(dirname, false);
     }

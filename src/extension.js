@@ -4,7 +4,7 @@ const { TerminalViewProvider } = require('./terminalViewProvider');
 const vscode = require('vscode');
 
 function activate(context) {
-	const FS = new JHubFS();
+	const FS = new JHubFS(context.globalState.get('username'), context.globalState.get('token'));
     let initialized = false;
 
 	context.subscriptions.push(vscode.workspace.registerFileSystemProvider('jhubfs', FS, { isCaseSensitive: true }));
@@ -16,24 +16,22 @@ function activate(context) {
 
 		if (!FS.token) {
 			FS.token = await vscode.window.showInputBox({ prompt: 'Api Token' });
+			context.globalState.update('token', FS.token)
 		}
 
 		if (!FS.username) {
 			FS.username = await vscode.window.showInputBox({ prompt: 'Username' });
+			context.globalState.update('username', FS.username)
 		}
-		console.log('init')
-		try {
-			initialized = await FS.init();
-		} catch (e) {
-			console.log('error');
 
-			console.log(e);
-		}
+		initialized = await FS.init();
 
 		if (initialized) {
             vscode.workspace.updateWorkspaceFolders(0, 0, { uri: vscode.Uri.parse('jhubfs:/'), name: "Jupyterlab" });
 
-			FS.loadFiles();
+			// setInterval(() => {
+			// 	FS.loadFiles();
+			// }, 2000);
 
 			context.subscriptions.push(vscode.commands.registerCommand('jhubcode.load', async () => {
 				if (initialized) {
@@ -47,6 +45,15 @@ function activate(context) {
 			reloadIcon.text = 'reload jupyterlab files'
 			reloadIcon.show();
 		}
+    }));
+
+	context.subscriptions.push(vscode.commands.registerCommand('jhubcode.creds', async () => {
+		FS.token = await vscode.window.showInputBox({ prompt: 'Api Token', value: FS.token });
+		context.globalState.update('token', FS.token)
+		
+
+		FS.username = await vscode.window.showInputBox({ prompt: 'Username' , value: FS.username });
+		context.globalState.update('username', FS.username)
     }));
 
 	context.subscriptions.push(

@@ -42,7 +42,7 @@ class TerminalViewProvider {
 	dispose() {
 		this._panel.dispose();
 		var req = https.request({
-			hostname: "jhub.csc.uvic.ca",
+			hostname: this._FS.url,
 			port: 443,
 			path: `/user/${this._FS.username}/api/terminals/${this.termID}?token=${this._FS.token}`,
 			method: 'DELETE',
@@ -67,7 +67,7 @@ class TerminalViewProvider {
 		const FS = this._FS;
 
 		var req = https.request({
-			hostname: "jhub.csc.uvic.ca",
+			hostname: this._FS.url,
 			port: 443,
 			path: `/user/${FS.username}/api/terminals?token=${FS.token}`,
 			method: 'POST',

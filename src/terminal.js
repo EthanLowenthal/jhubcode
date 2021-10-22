@@ -2,6 +2,7 @@
     const term = new Terminal();
     const fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
+    term.setOption('fontFamily', 'MesloLGS NF')
     term.open(document.getElementById('terminal'));
     fitAddon.fit()
 

@@ -22,6 +22,10 @@
 			{
 				"command": "jhubcode.terminalStart",
 				"title": "Start Jupyterlab Terminal"
+			},
+			{
+				"command": "jhubcode.creds",
+				"title": "Update Jupyterlab Creds"
 			}
 		]
 	},
